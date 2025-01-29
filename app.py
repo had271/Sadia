@@ -5,17 +5,17 @@ import pygame
 import requests
 from streamlit_webrtc import webrtc_streamer, WebRtcMode
 from ultralytics import YOLO
-import numpy as np
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get the API URL from environment variables
+api_url = os.getenv('API_URL', 'https://api.kokorotts.com/v1/audio/speech')  # Use default URL if not set
 
 # Load YOLO pre-trained model
 model = YOLO('yolo11n.pt')  # Ensure the correct model path
-
-# Paths to audio files for locations
-audio_files = {
-    "left": "/Users/hadeel/Desktop/SADIA/left.mp3",
-    "center": "/Users/hadeel/Desktop/SADIA/center.mp3",
-    "right": "/Users/hadeel/Desktop/SADIA/right.mp3"
-}
 
 # Initialize pygame mixer
 pygame.mixer.init()
@@ -29,21 +29,19 @@ if 'video_active' not in st.session_state:
 
 # Function to send audio request to API for object name
 def get_object_audio(object_name):
-    # Send a request to the API to get the TTS audio for the object
     response = requests.post(
-        "https://api.kokorotts.com/v1/audio/speech",  # Example Kokoro TTS API endpoint
+        api_url,
         json={
-            "model": "kokoro",  # Not used but required for compatibility
+            "model": "kokoro",  # Required for compatibility
             "input": f"It's a {object_name}",
-            "voice": "af_bella",  # You can change the voice here
-            "response_format": "mp3",  # Supported: mp3, wav, opus, flac
+            "voice": "af_bella",
+            "response_format": "mp3",
             "speed": 1.0
         }
     )
     
     if response.status_code == 200:
-        # Return the audio content in bytes
-        return response.content  
+        return response.content
     else:
         st.error("Failed to get audio from API")
         return None
@@ -53,15 +51,14 @@ def play_audio(files):
     for file in files:
         pygame.mixer.music.load(file)
         pygame.mixer.music.play()
-        while pygame.mixer.music.get_busy():  # Wait until audio finishes playing
+        while pygame.mixer.music.get_busy():
             continue
 
 # Function to process frames for object detection
 def process_frame(frame):
-    H, W, _ = frame.shape  # Get frame dimensions
-    results = model(frame)  # Perform detection with YOLO model
+    H, W, _ = frame.shape
+    results = model(frame)
     
-    # Process the detection results
     for result in results:
         boxes = result.boxes
         for box in boxes:
@@ -75,33 +72,31 @@ def process_frame(frame):
 
             # Calculate the center of the box
             centerX = (x1 + x2) // 2
-
-            # Determine the position of the object in the frame (left, center, right)
-            if centerX <= W / 3:
-                W_pos = "left"
-            elif centerX <= (W / 3 * 2):
-                W_pos = "center"
-            else:
-                W_pos = "right"
+            W_pos = "left" if centerX <= W / 3 else "center" if centerX <= (W / 3 * 2) else "right"
 
             # Construct position description
             position = f"The {class_detected_name} is at the {W_pos}"
             st.write(position)
-            
-            # Play the corresponding audio files for the location
+
+            # Play corresponding location audio
+            audio_files = {
+                "left": "left.mp3",  # Example path, consider changing to relative paths or dynamic loading
+                "center": "center.mp3",
+                "right": "right.mp3"
+            }
             play_audio([audio_files[W_pos]])
 
-            # Get the TTS audio for the detected object and play it
+            # Get object audio and play it
             object_audio = get_object_audio(class_detected_name)
             if object_audio:
                 with open(f"{class_detected_name}_audio.mp3", "wb") as f:
                     f.write(object_audio)
                 pygame.mixer.music.load(f"{class_detected_name}_audio.mp3")
                 pygame.mixer.music.play()
-                while pygame.mixer.music.get_busy():  # Wait until the object audio finishes
+                while pygame.mixer.music.get_busy():
                     continue
 
-            # Add text label with a background rectangle
+            # Add text label
             text = f'{class_detected_name} ({confidence:.2f}%)'
             (text_width, text_height), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
             cv2.rectangle(frame, (x1, y1 - 20), (x1 + text_width, y1), (0, 0, 255), -1)
@@ -111,10 +106,7 @@ def process_frame(frame):
 
 # Callback for Streamlit WebRTC to handle incoming video frames
 def video_frame_callback(frame):
-    # Convert the frame to numpy array for processing
     array = process_frame(frame.to_ndarray(format="bgr24"))
-
-    # Return the processed frame for Streamlit to display
     return av.VideoFrame.from_ndarray(array, format="bgr24")
 
 # Button to start/stop the webcam stream
@@ -126,10 +118,10 @@ if st.session_state.video_active:
     webrtc_streamer(
         key="yolo-webrtc",
         video_frame_callback=video_frame_callback,
-        mode=WebRtcMode.SENDRECV,  # Sends and receives video stream
+        mode=WebRtcMode.SENDRECV,
         media_stream_constraints={
             "video": True,
-            "audio": False  # Set to False if you don't need audio
+            "audio": False
         }
     )
 else:
