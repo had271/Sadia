@@ -15,7 +15,7 @@ load_dotenv()
 api_url = os.getenv('API_URL', 'https://api.kokorotts.com/v1/audio/speech')  # Use default URL if not set
 
 # Load YOLO pre-trained model
-model = YOLO('yolo11n.pt')  # Ensure the correct model path
+model = YOLO('yolo11n.pt')
 
 # Initialize pygame mixer
 pygame.mixer.init()
@@ -32,7 +32,7 @@ def get_object_audio(object_name):
     response = requests.post(
         api_url,
         json={
-            "model": "kokoro",  # Required for compatibility
+            "model": "kokoro",
             "input": f"It's a {object_name}",
             "voice": "af_bella",
             "response_format": "mp3",
